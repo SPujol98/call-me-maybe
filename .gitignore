@@ -1,0 +1,8 @@
+# Python Cache & Artifacts
+__pycache__/
+
+# Type Checking & Linting
+.mypy_cache/
+
+#Testing
+.pytest_cache/
