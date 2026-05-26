@@ -1,8 +1,14 @@
+# Virtual Environment
+.venv
+
+# .env
+.env.local
+
 # Python Cache & Artifacts
 __pycache__/
 
 # Type Checking & Linting
 .mypy_cache/
 
-#Testing
+# Testing
 .pytest_cache/
