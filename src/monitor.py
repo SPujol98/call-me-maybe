@@ -17,6 +17,7 @@ class Monitor:
         self.current_function: FunctionDefinition | None = None
         self.current_param_index: int = 0
         self.vocab: dict[str, int] = self._load_vocab()
+        self.structural_queue: deque[int] = deque()
 
     def _build_prefix_map(self, n_funcs:
                           list[FunctionDefinition]) -> dict[tuple, set[int]]:
@@ -35,6 +36,14 @@ class Monitor:
     def update(self, token_id: int) -> None:
         self.generated_ids.append(token_id)
 
+        if self.state == State.STRUCTURAL:
+            if self.structural_queue and token_id == self.structural_queue[0]:
+                self.structural_queue.popleft()
+            if not self.structural_queue:
+                self._transition_from_structural()
+    
+    def _transition_from_structural(self) -> None:
+
     def get_valid_tokens(self) -> set[int]:
         if self.state == State.FUNCTION_NAME:
             return self.prefix_map.get(tuple(self.generated_ids), set())
@@ -47,4 +56,7 @@ class Monitor:
         elif self.state == State.PARAM_STRING:
             return set(self.vocab.values()) - {self.vocab['"']}
         elif self.state == State.STRUCTURAL:
+            if self.structural_queue:
+                return {self.structural_queue[0]}
+            return set()
         

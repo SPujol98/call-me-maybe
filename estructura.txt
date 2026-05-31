@@ -1,0 +1,26 @@
+.
+├── data
+│   ├── input
+│   │   ├── function_calling_tests.json
+│   │   └── functions_definition.json
+│   └── output
+├── estructura.txt
+├── llm_sdk
+│   ├── llm_sdk
+│   │   └── __init__.py
+│   ├── pyproject.toml
+│   └── uv.lock
+├── Makefile
+├── pyproject.toml
+├── src
+│   ├── __init__.py
+│   ├── json_parser.py
+│   ├── logits_processor.py
+│   ├── __main__.py
+│   ├── models.py
+│   ├── monitor.py
+│   └── state.py
+├── test_vocab.py
+└── uv.lock
+
+6 directories, 17 files
