@@ -51,12 +51,14 @@ class Monitor:
             self.state = State.PARAM_KEY
             self.structural_phase = StructuralPhase.PARAM_SEPARATOR
         elif self.structural_phase == StructuralPhase.PARAM_SEPARATOR:
-            if self.current_function and (self.current_param_index >= len(self.current_function.parameters)):
+            if self.current_function and (self.current_param_index
+                                          >= len(self.
+                                                 current_function.parameters)):
+                self.state = State.STRUCTURAL
                 self.structural_phase = StructuralPhase.CLOSING
             else:
                 self.state = State.PARAM_KEY
         elif self.structural_phase == StructuralPhase.CLOSING:
-            self.state = State.STRUCTURAL
             pass
 
     def _enqueue_strucutural(self, str_phase: StructuralPhase) -> None:
