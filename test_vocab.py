@@ -1,10 +1,17 @@
 import json
 
 from llm_sdk import Small_LLM_Model
+from src.monitor import Monitor
+from src.json_parser import load_function_definitions
 
 
 def prueba() -> None:
     model = Small_LLM_Model()
+    functions = load_function_definitions("data/input/"
+                                          "functions_definition.json")
+    monitor = Monitor(functions, model)
+    monitor.test()
+    '''
     vocab_path = model.get_path_to_vocab_file()
 
     functions = ['"fn_add_numbers"',
@@ -21,7 +28,7 @@ def prueba() -> None:
     print(type(vocab))
 
 
-'''
+
     id_to_token = {v: k for k, v in vocab.items()}
     for fn in functions:
         ids = model.encode(fn).tolist()[0]

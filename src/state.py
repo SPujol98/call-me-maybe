@@ -7,3 +7,10 @@ class State(Enum):
     PARAM_KEY = auto()
     PARAM_NUMBER = auto()
     PARAM_STRING = auto()
+
+
+class StructuralPhase(Enum):
+    OPENING = auto()
+    AFTER_NAME = auto()
+    PARAM_SEPARATOR = auto()
+    CLOSING = auto()

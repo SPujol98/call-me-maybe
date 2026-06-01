@@ -2,8 +2,8 @@ import json
 
 from collections import deque
 from src.models import FunctionDefinition
-from src.state import State
-from llm_sdk import Small_LLM_Model
+from src.state import State, StructuralPhase
+from llm_sdk import Small_LLM_Model  # type: ignore
 
 
 class Monitor:
@@ -18,6 +18,7 @@ class Monitor:
         self.current_param_index: int = 0
         self.vocab: dict[str, int] = self._load_vocab()
         self.structural_queue: deque[int] = deque()
+        self.stuctural_phase: StructuralPhase = StructuralPhase.OPENING
 
     def _build_prefix_map(self, n_funcs:
                           list[FunctionDefinition]) -> dict[tuple, set[int]]:
@@ -27,7 +28,7 @@ class Monitor:
             for i in range(len(ids)):
                 prefix_map.setdefault(tuple(ids[:i]), set()).add(ids[i])
         return prefix_map
-    
+
     def _load_vocab(self) -> dict[str, int]:
         vocab_path = self.model.get_path_to_vocab_file()
         with open(vocab_path) as f:
@@ -40,14 +41,19 @@ class Monitor:
             if self.structural_queue and token_id == self.structural_queue[0]:
                 self.structural_queue.popleft()
             if not self.structural_queue:
-                self._transition_from_structural()
-    
-    def _transition_from_structural(self) -> None:
+                pass
+                # self._transition_from_structural()
+
+    # def _transition_from_structural(self) -> None:
+
+    def _enqueue_strucutural(self, str_phase: StructuralPhase) -> None:
+        pass
 
     def get_valid_tokens(self) -> set[int]:
         if self.state == State.FUNCTION_NAME:
             return self.prefix_map.get(tuple(self.generated_ids), set())
         elif self.state == State.PARAM_KEY:
+            pass
         elif self.state == State.PARAM_NUMBER:
             valid = set()
             for ch in "0123456789.-":
@@ -59,4 +65,9 @@ class Monitor:
             if self.structural_queue:
                 return {self.structural_queue[0]}
             return set()
-        
+        return set()
+
+    def test(self) -> None:
+        print(self.current_function)
+        print(self.current_param_index)
+        print(self.structural_queue)
