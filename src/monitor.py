@@ -18,7 +18,7 @@ class Monitor:
         self.current_param_index: int = 0
         self.vocab: dict[str, int] = self._load_vocab()
         self.structural_queue: deque[int] = deque()
-        self.stuctural_phase: StructuralPhase = StructuralPhase.OPENING
+        self.structural_phase: StructuralPhase = StructuralPhase.OPENING
 
     def _build_prefix_map(self, n_funcs:
                           list[FunctionDefinition]) -> dict[tuple, set[int]]:
@@ -41,13 +41,45 @@ class Monitor:
             if self.structural_queue and token_id == self.structural_queue[0]:
                 self.structural_queue.popleft()
             if not self.structural_queue:
-                pass
-                # self._transition_from_structural()
+                self._transition_from_structural()
 
-    # def _transition_from_structural(self) -> None:
+    def _transition_from_structural(self) -> None:
+        if self.structural_phase == StructuralPhase.OPENING:
+            self.state = State.FUNCTION_NAME
+            self.structural_phase = StructuralPhase.AFTER_NAME
+        elif self.structural_phase == StructuralPhase.AFTER_NAME:
+            self.state = State.PARAM_KEY
+            self.structural_phase = StructuralPhase.PARAM_SEPARATOR
+        elif self.structural_phase == StructuralPhase.PARAM_SEPARATOR:
+            if self.current_function and (self.current_param_index >= len(self.current_function.parameters)):
+                self.structural_phase = StructuralPhase.CLOSING
+            else:
+                self.state = State.PARAM_KEY
+        elif self.structural_phase == StructuralPhase.CLOSING:
+            self.state = State.STRUCTURAL
+            pass
 
     def _enqueue_strucutural(self, str_phase: StructuralPhase) -> None:
-        pass
+        if self.current_function is None:
+            return
+        if str_phase == StructuralPhase.OPENING:
+            ids = self.model.encode('{"name": ').tolist()[0]
+            for id in ids:
+                self.structural_queue.append(id)
+        elif str_phase == StructuralPhase.AFTER_NAME:
+            ids = self.model.encode('", "parameters": {').tolist()[0]
+            for id in ids:
+                self.structural_queue.append(id)
+        elif str_phase == StructuralPhase.CLOSING:
+            ids = self.model.encode('}').tolist()[0]
+            for id in ids:
+                self.structural_queue.append(id)
+        elif str_phase == StructuralPhase.PARAM_SEPARATOR:
+            separator = list(self.current_function.
+                             parameters.keys())[self.current_param_index]
+            ids = self.model.encode(f', "{separator}":').tolist()[0]
+            for id in ids:
+                self.structural_queue.append(id)
 
     def get_valid_tokens(self) -> set[int]:
         if self.state == State.FUNCTION_NAME:
