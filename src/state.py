@@ -13,4 +13,5 @@ class StructuralPhase(Enum):
     OPENING = auto()
     AFTER_NAME = auto()
     PARAM_SEPARATOR = auto()
+    VALUE_SEPARATOR = auto()
     CLOSING = auto()

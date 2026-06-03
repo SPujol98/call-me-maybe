@@ -1,5 +1,8 @@
 import argparse
+
 from src.json_parser import load_function_definitions, load_input_prompts
+from src.monitor import Monitor
+from llm_sdk import Small_LLM_Model
 
 
 def main() -> None:
@@ -20,9 +23,9 @@ def main() -> None:
     args = arg_parser.parse_args()
     f_definitions = load_function_definitions(args.functions_definition)
     i_prompts = load_input_prompts(args.input)
-
-    print(f_definitions)
     print(i_prompts)
+    model = Small_LLM_Model()
+    monitor = Monitor(f_definitions, model)
 
 
 if __name__ == "__main__":
