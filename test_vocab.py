@@ -11,6 +11,14 @@ def prueba() -> None:
                                           "functions_definition.json")
     monitor = Monitor(functions, model)
     monitor.test()
+    vocab_path = model.get_path_to_vocab_file()
+    with open(vocab_path) as f:
+        vocab = json.load(f)
+    ids = model.encode('{"name": ').tolist()[0]
+    print(f"After quote: {monitor.function_prefix_map.get((1,), set())}")
+    id_to_tok = {v: k for k, v in monitor.vocab.items()}
+    tokens = {id_to_tok.get(i, '?') for i in monitor.function_prefix_map.get((1,), set())}
+    print(f"After quote tokens: {tokens}")
     '''
     vocab_path = model.get_path_to_vocab_file()
 
@@ -25,7 +33,6 @@ def prueba() -> None:
     with open(vocab_path) as f:
         vocab = json.load(f)
     print(vocab)
-    print(type(vocab))
 
 
 

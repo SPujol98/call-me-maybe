@@ -31,17 +31,27 @@ def main() -> None:
     model = Small_LLM_Model()
     monitor = Monitor(f_definitions, model)
     result_list: list[FunctionCall] = []
+    i_prompts = i_prompts[:1]
     for prompt in i_prompts:
         print(f"Processing: {prompt.prompt}")
         monitor.start()
         input_ids = model.encode(prompt.prompt).tolist()[0]
         while not monitor.end_checker():
+
+            print(f"state: {monitor.state}, phase: {monitor.structural_phase}, queue: {len(monitor.structural_queue)}")
+
             logits = model.get_logits_from_input_ids(input_ids)
             valid = monitor.get_valid_tokens()
+            print(f"valid tokens: {valid}")
             filtered = filter_logits(logits, valid)
             token_id = int(np.argmax(filtered))
+
+            id_to_tok = {v: k for k, v in monitor.vocab.items()}
+            print(f"token_id: {token_id}, token: {repr(id_to_tok.get(token_id, '?'))}")
             input_ids.append(token_id)
+
             monitor.update(token_id)
+
         result_json = json.loads(model.decode(monitor.generated_ids))
         result_list.append(FunctionCall(
             prompt=prompt.prompt,

@@ -13,8 +13,12 @@ class Monitor:
         self.state: State = State.STRUCTURAL
         self.generated_ids: list[int] = []
         self.functions: list[FunctionDefinition] = functions
-        self.prefix_map: dict[tuple,
-                              set[int]] = self._build_prefix_map(functions)
+        self.function_prefix_map: dict[tuple, set[int]] = (
+            self._build_function_prefix_map(functions)
+            )
+        self.param_prefix_map: dict[tuple, set[int]] = (
+            self._build_param_prefix_map(functions)
+            )
         self.current_function: FunctionDefinition | None = None
         self.current_param_index: int = 0
         self.vocab: dict[str, int] = self._load_vocab()
@@ -36,14 +40,20 @@ class Monitor:
         for i in range(len(ids)):
             prefix_map.setdefault(tuple(ids[:i]), set()).add(ids[i])
 
-    def _build_prefix_map(self, n_funcs:
-                          list[FunctionDefinition]) -> dict[tuple, set[int]]:
-        prefix_map: dict[tuple, set[int]] = {}
+    def _build_function_prefix_map(
+            self, n_funcs: list[FunctionDefinition]) -> dict[tuple, set[int]]:
+        function_prefix_map: dict[tuple, set[int]] = {}
         for fn in n_funcs:
-            self._add_to_prefix_map(prefix_map, f'"{fn.name}"')
+            self._add_to_prefix_map(function_prefix_map, f'"{fn.name}"')
+        return function_prefix_map
+
+    def _build_param_prefix_map(
+            self, n_funcs: list[FunctionDefinition]) -> dict[tuple, set[int]]:
+        param_prefix_map: dict[tuple, set[int]] = {}
+        for fn in n_funcs:
             for key in fn.parameters.keys():
-                self._add_to_prefix_map(prefix_map, f'"{key}"')
-        return prefix_map
+                self._add_to_prefix_map(param_prefix_map, f'"{key}"')
+        return param_prefix_map
 
     def _load_vocab(self) -> dict[str, int]:
         vocab_path = self.model.get_path_to_vocab_file()
@@ -59,10 +69,10 @@ class Monitor:
             if not self.structural_queue:
                 self._transition_from_structural()
         elif self.state == State.FUNCTION_NAME:
-            if token_id == self.vocab['"']:
+            if token_id == self.vocab['"'] and len(self.generated_ids) > 1:
                 self.state = State.STRUCTURAL
-                self._enqueue_strucutural(StructuralPhase.AFTER_NAME)
                 quote_id = self.vocab['"']
+                name_tokens: list[int] = []
                 for i in range(len(self.generated_ids) - 2, -1, -1):
                     if self.generated_ids[i] == quote_id:
                         name_tokens = self.generated_ids[i+1:-1]
@@ -71,8 +81,10 @@ class Monitor:
                 name = "".join(id_to_token[i] for i in name_tokens)
                 self.current_function = next(fn for fn in
                                              self.functions if fn.name == name)
+                self._enqueue_strucutural(StructuralPhase.AFTER_NAME)
         elif self.state == State.PARAM_KEY:
-            if token_id == self.vocab['"']:
+            if token_id == self.vocab['"'] and len(self.generated_ids) > 1:
+                self.state = State.STRUCTURAL
                 self._enqueue_strucutural(StructuralPhase.VALUE_SEPARATOR)
         elif self.state == State.PARAM_STRING:
             if token_id == self.vocab['"']:
@@ -87,11 +99,13 @@ class Monitor:
 
     def _transition_from_structural(self) -> None:
         if self.structural_phase == StructuralPhase.OPENING:
+            self.generated_ids = []
             self.state = State.FUNCTION_NAME
             self.structural_phase = StructuralPhase.AFTER_NAME
         elif self.current_function is None:
             return
         elif self.structural_phase == StructuralPhase.AFTER_NAME:
+            self.generated_ids = []
             self.state = State.PARAM_KEY
             self.structural_phase = StructuralPhase.PARAM_SEPARATOR
         elif self.structural_phase == StructuralPhase.PARAM_SEPARATOR:
@@ -101,6 +115,7 @@ class Monitor:
                 self.state = State.STRUCTURAL
                 self.structural_phase = StructuralPhase.CLOSING
             else:
+                self.generated_ids = []
                 self.state = State.PARAM_KEY
         elif self.structural_phase == StructuralPhase.VALUE_SEPARATOR:
             key_option = list(self.current_function.
@@ -116,7 +131,7 @@ class Monitor:
 
     def _enqueue_strucutural(self, str_phase: StructuralPhase) -> None:
         if str_phase == StructuralPhase.OPENING:
-            ids = self.model.encode('{"name": ').tolist()[0]
+            ids = self.model.encode('{"name":').tolist()[0]
             for id in ids:
                 self.structural_queue.append(id)
         elif self.current_function is None:
@@ -142,9 +157,10 @@ class Monitor:
 
     def get_valid_tokens(self) -> set[int]:
         if self.state == State.FUNCTION_NAME:
-            return self.prefix_map.get(tuple(self.generated_ids), set())
+            return self.function_prefix_map.get(tuple(self.generated_ids),
+                                                set())
         elif self.state == State.PARAM_KEY:
-            return self.prefix_map.get(tuple(self.generated_ids), set())
+            return self.param_prefix_map.get(tuple(self.generated_ids), set())
         elif self.state == State.PARAM_NUMBER:
             valid = set()
             for ch in "0123456789.-":
