@@ -32,6 +32,7 @@ def main() -> None:
     monitor = Monitor(f_definitions, model)
     result_list: list[FunctionCall] = []
     for prompt in i_prompts:
+        print(f"Processing: {prompt.prompt}")
         monitor.start()
         input_ids = model.encode(prompt.prompt).tolist()[0]
         while not monitor.end_checker():
@@ -46,6 +47,7 @@ def main() -> None:
             prompt=prompt.prompt,
             name=result_json["name"],
             parameters=result_json["parameters"]))
+        print(f"Done: {result_json['name']}")
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w") as f:
         f.write(json.dumps([fc.model_dump() for fc in result_list], indent=2))
