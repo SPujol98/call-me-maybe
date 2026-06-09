@@ -11,6 +11,12 @@ from llm_sdk import Small_LLM_Model
 
 
 def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
+    context: str = "You are a function calling engine. Available functions:"
+    for fn in functions:
+        context += f"- {fn.name}: {fn.description}"
+    context += f"User request: {prompt}"
+    context += 'Output the function call as JSON:\n{"name": "'
+    return context
 
 
 def main() -> None:
@@ -38,7 +44,10 @@ def main() -> None:
     for prompt in i_prompts:
         print(f"Processing: {prompt.prompt}")
         monitor.start()
-        input_ids = model.encode(prompt.prompt).tolist()[0]
+        full_prompt = build_prompt(prompt.prompt, f_definitions)
+        print(f"Prueba full_prompt: {full_prompt}")
+        input_ids = model.encode(full_prompt).tolist()[0]
+        print(f"Prueba ids: {input_ids}")
         while not monitor.end_checker():
             logits = model.get_logits_from_input_ids(input_ids)
             valid = monitor.get_valid_tokens()
