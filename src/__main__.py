@@ -6,8 +6,11 @@ import os
 from src.json_parser import load_function_definitions, load_input_prompts
 from src.monitor import Monitor
 from src.logits_processor import filter_logits
-from src.models import FunctionCall
+from src.models import FunctionCall, FunctionDefinition
 from llm_sdk import Small_LLM_Model
+
+
+def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
 
 
 def main() -> None:
@@ -37,22 +40,19 @@ def main() -> None:
         monitor.start()
         input_ids = model.encode(prompt.prompt).tolist()[0]
         while not monitor.end_checker():
-
-            print(f"state: {monitor.state}, phase: {monitor.structural_phase}, queue: {len(monitor.structural_queue)}")
-
             logits = model.get_logits_from_input_ids(input_ids)
             valid = monitor.get_valid_tokens()
             print(f"valid tokens: {valid}")
             filtered = filter_logits(logits, valid)
             token_id = int(np.argmax(filtered))
 
-            id_to_tok = {v: k for k, v in monitor.vocab.items()}
-            print(f"token_id: {token_id}, token: {repr(id_to_tok.get(token_id, '?'))}")
             input_ids.append(token_id)
 
             monitor.update(token_id)
 
-        result_json = json.loads(model.decode(monitor.generated_ids))
+        decoded = model.decode(monitor.all_generated_ids)
+        print(f"Generated JSON: {repr(decoded)}")
+        result_json = json.loads(model.decode(monitor.all_generated_ids))
         result_list.append(FunctionCall(
             prompt=prompt.prompt,
             name=result_json["name"],

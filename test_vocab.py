@@ -19,6 +19,8 @@ def prueba() -> None:
     id_to_tok = {v: k for k, v in monitor.vocab.items()}
     tokens = {id_to_tok.get(i, '?') for i in monitor.function_prefix_map.get((1,), set())}
     print(f"After quote tokens: {tokens}")
+    ids = model.encode('2.0}').tolist()[0]
+    print([id_to_tok[i] for i in ids])
     '''
     vocab_path = model.get_path_to_vocab_file()
 

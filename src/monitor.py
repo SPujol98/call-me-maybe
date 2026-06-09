@@ -12,13 +12,13 @@ class Monitor:
         self.model = model
         self.state: State = State.STRUCTURAL
         self.generated_ids: list[int] = []
+        self.all_generated_ids: list[int] = []
         self.functions: list[FunctionDefinition] = functions
         self.function_prefix_map: dict[tuple, set[int]] = (
             self._build_function_prefix_map(functions)
             )
-        self.param_prefix_map: dict[tuple, set[int]] = (
-            self._build_param_prefix_map(functions)
-            )
+        self.param_number_count: int = 0
+        self.current_param_prefix_map: dict[tuple, set[int]] = {}
         self.current_function: FunctionDefinition | None = None
         self.current_param_index: int = 0
         self.vocab: dict[str, int] = self._load_vocab()
@@ -28,8 +28,10 @@ class Monitor:
     def start(self) -> None:
         self.state = State.STRUCTURAL
         self.generated_ids = []
+        self.all_generated_ids = []
         self.current_function = None
         self.current_param_index = 0
+        self.param_number_count = 0
         self.structural_queue = deque()
         self.structural_phase = StructuralPhase.OPENING
         self._enqueue_strucutural(StructuralPhase.OPENING)
@@ -47,13 +49,12 @@ class Monitor:
             self._add_to_prefix_map(function_prefix_map, f'"{fn.name}"')
         return function_prefix_map
 
-    def _build_param_prefix_map(
-            self, n_funcs: list[FunctionDefinition]) -> dict[tuple, set[int]]:
-        param_prefix_map: dict[tuple, set[int]] = {}
-        for fn in n_funcs:
-            for key in fn.parameters.keys():
-                self._add_to_prefix_map(param_prefix_map, f'"{key}"')
-        return param_prefix_map
+    def _build_current_param_prefix_map(
+            self, func: FunctionDefinition) -> dict[tuple, set[int]]:
+        current_param_prefix_map: dict[tuple, set[int]] = {}
+        for key in func.parameters.keys():
+            self._add_to_prefix_map(current_param_prefix_map, f'"{key}"')
+        return current_param_prefix_map
 
     def _load_vocab(self) -> dict[str, int]:
         vocab_path = self.model.get_path_to_vocab_file()
@@ -62,6 +63,7 @@ class Monitor:
 
     def update(self, token_id: int) -> None:
         self.generated_ids.append(token_id)
+        self.all_generated_ids.append(token_id)
 
         if self.state == State.STRUCTURAL:
             if self.structural_queue and token_id == self.structural_queue[0]:
@@ -81,10 +83,14 @@ class Monitor:
                 name = "".join(id_to_token[i] for i in name_tokens)
                 self.current_function = next(fn for fn in
                                              self.functions if fn.name == name)
+                self.current_param_prefix_map = (
+                    self._build_current_param_prefix_map(self.
+                                                         current_function))
                 self._enqueue_strucutural(StructuralPhase.AFTER_NAME)
         elif self.state == State.PARAM_KEY:
             if token_id == self.vocab['"'] and len(self.generated_ids) > 1:
                 self.state = State.STRUCTURAL
+                self.structural_phase = StructuralPhase.VALUE_SEPARATOR
                 self._enqueue_strucutural(StructuralPhase.VALUE_SEPARATOR)
         elif self.state == State.PARAM_STRING:
             if token_id == self.vocab['"']:
@@ -92,10 +98,29 @@ class Monitor:
                 self.state = State.STRUCTURAL
                 self._enqueue_strucutural(StructuralPhase.PARAM_SEPARATOR)
         elif self.state == State.PARAM_NUMBER:
-            if token_id not in {self.vocab[ch] for ch in "0123456789.-"}:
+            if token_id == self.vocab['}']:
+                self.param_number_count = 0
                 self.current_param_index += 1
                 self.state = State.STRUCTURAL
-                self._enqueue_strucutural(StructuralPhase.PARAM_SEPARATOR)
+                self.structural_phase = StructuralPhase.CLOSING
+                self._enqueue_strucutural(StructuralPhase.CLOSING)
+            elif token_id == self.vocab[',']:
+                self.param_number_count = 0
+                self.current_param_index += 1
+                self.state = State.STRUCTURAL
+                if self.current_function and (self.
+                                              current_param_index
+                                              >= len(self.
+                                                     current_function.
+                                                     parameters)):
+                    self.structural_phase = StructuralPhase.CLOSING
+                else:
+                    self.structural_phase = (StructuralPhase.
+                                             PARAM_SEPARATOR_NO_COMMA)
+                    self._enqueue_strucutural(StructuralPhase.
+                                              PARAM_SEPARATOR_NO_COMMA)
+            else:
+                self.param_number_count += 1
 
     def _transition_from_structural(self) -> None:
         if self.structural_phase == StructuralPhase.OPENING:
@@ -137,7 +162,7 @@ class Monitor:
         elif self.current_function is None:
             return
         elif str_phase == StructuralPhase.AFTER_NAME:
-            ids = self.model.encode('", "parameters": {').tolist()[0]
+            ids = self.model.encode(', "parameters": {').tolist()[0]
             for id in ids:
                 self.structural_queue.append(id)
         elif str_phase == StructuralPhase.CLOSING:
@@ -150,6 +175,12 @@ class Monitor:
             ids = self.model.encode(f', "{separator}":').tolist()[0]
             for id in ids:
                 self.structural_queue.append(id)
+        elif str_phase == StructuralPhase.PARAM_SEPARATOR_NO_COMMA:
+            separator = list(self.current_function.
+                             parameters.keys())[self.current_param_index]
+            ids = self.model.encode(f'"{separator}":').tolist()[0]
+            for id in ids:
+                self.structural_queue.append(id)
         elif str_phase == StructuralPhase.VALUE_SEPARATOR:
             ids = self.model.encode(':').tolist()[0]
             for id in ids:
@@ -160,11 +191,23 @@ class Monitor:
             return self.function_prefix_map.get(tuple(self.generated_ids),
                                                 set())
         elif self.state == State.PARAM_KEY:
-            return self.param_prefix_map.get(tuple(self.generated_ids), set())
+            return (self.current_param_prefix_map.
+                    get(tuple(self.generated_ids), set()))
         elif self.state == State.PARAM_NUMBER:
             valid = set()
+            if self.current_function is None:
+                return set()
+            valid = set()
+            is_last = (self.current_param_index + 1 >= len(
+                self.current_function.parameters))
+            exit_token = self.vocab['}'] if is_last else self.vocab[',']
+
+            if self.param_number_count > 10:
+                return {exit_token}
+
             for ch in "0123456789.-":
                 valid.add(self.vocab[ch])
+            valid.add(exit_token)
             return valid
         elif self.state == State.PARAM_STRING:
             return set(self.vocab.values()) - {self.vocab['"']}
