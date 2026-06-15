@@ -10,12 +10,13 @@ from src.models import FunctionCall, FunctionDefinition
 from llm_sdk import Small_LLM_Model
 
 
-def build_prompt(prompt: str, functions: list[FunctionDefinition]) -> str:
-    context: str = "You are a function calling engine. Available functions:"
+def build_prompt(functions: list[FunctionDefinition]) -> str:
+    context = "You are a function calling engine. Available functions:\n"
     for fn in functions:
-        context += f"- {fn.name}: {fn.description}"
-    context += f"User request: {prompt}"
-    context += 'Output the function call as JSON:\n{"name": "'
+        context += f"- {fn.name}: {fn.description}\n"
+    context += '\nExample:\n'
+    context += ('{"prompt": "Greet alice", "name": "fn_greet",'
+                ' "parameters": {"name": "alice"}}\n')
     return context
 
 
@@ -40,33 +41,27 @@ def main() -> None:
     model = Small_LLM_Model()
     monitor = Monitor(f_definitions, model)
     result_list: list[FunctionCall] = []
-    i_prompts = i_prompts[:1]
+
     for prompt in i_prompts:
-        print(f"Processing: {prompt.prompt}")
-        monitor.start()
-        full_prompt = build_prompt(prompt.prompt, f_definitions)
-        print(f"Prueba full_prompt: {full_prompt}")
+        monitor.start(prompt.prompt)
+        full_prompt = build_prompt(f_definitions)
         input_ids = model.encode(full_prompt).tolist()[0]
-        print(f"Prueba ids: {input_ids}")
+
         while not monitor.end_checker():
+            input_ids = input_ids[-512:]
             logits = model.get_logits_from_input_ids(input_ids)
             valid = monitor.get_valid_tokens()
-            print(f"valid tokens: {valid}")
             filtered = filter_logits(logits, valid)
             token_id = int(np.argmax(filtered))
-
             input_ids.append(token_id)
-
             monitor.update(token_id)
 
         decoded = model.decode(monitor.all_generated_ids)
-        print(f"Generated JSON: {repr(decoded)}")
-        result_json = json.loads(model.decode(monitor.all_generated_ids))
+        result_json = json.loads(decoded)
         result_list.append(FunctionCall(
             prompt=prompt.prompt,
             name=result_json["name"],
             parameters=result_json["parameters"]))
-        print(f"Done: {result_json['name']}")
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w") as f:
         f.write(json.dumps([fc.model_dump() for fc in result_list], indent=2))
