@@ -12,3 +12,6 @@ __pycache__/
 
 # Testing
 .pytest_cache/
+
+# Output
+data/output/

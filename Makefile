@@ -6,7 +6,7 @@ MAIN = -m src
 
 # MyPy Flags
 MYPY_FLAGS = --warn-return-any --warn-unused-ignores --ignore-missing-imports \
-             --disallow-untyped-defs --check-untyped-defs
+             --disallow-untyped-defs --check-untyped-defs --exclude llm_sdk
 
 # Terminal colors
 GREEN = \033[0;32m
@@ -32,6 +32,7 @@ clean:
 	find . -type d -name ".mypy_cache" -exec rm -rf {} +
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	rm -rf .venv
 	@echo "$(GREEN)Clean completed.$(NC)"
 
 lint: install
@@ -44,4 +45,4 @@ lint-strict: install
 	@echo "$(CYAN)Executing flake8...$(NC)"
 	$(UV) run flake8 .
 	@echo "$(CYAN)Executing mypy strict...$(NC)"
-	$(UV) run mypy . --strict
+	$(UV) run mypy . --exclude llm_sdk --strict

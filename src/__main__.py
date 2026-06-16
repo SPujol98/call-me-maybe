@@ -7,7 +7,7 @@ from src.json_parser import load_function_definitions, load_input_prompts
 from src.monitor import Monitor
 from src.logits_processor import filter_logits
 from src.models import FunctionCall, FunctionDefinition
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore
 
 
 def build_prompt(functions: list[FunctionDefinition]) -> str:

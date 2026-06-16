@@ -14,10 +14,10 @@ class Monitor:
         self.generated_ids: list[int] = []
         self.all_generated_ids: list[int] = []
         self.functions: list[FunctionDefinition] = functions
-        self.function_prefix_map: dict[tuple, set[int]] = (
+        self.function_prefix_map: dict[tuple[int, ...], set[int]] = (
             self._build_function_prefix_map(functions)
             )
-        self.bool_prefix_map: dict[tuple, set[int]] = (
+        self.bool_prefix_map: dict[tuple[int, ...], set[int]] = (
             self._build_bool_prefix_map())
         self.current_prompt: str = ""
         self.param_number_count: int = 0
@@ -45,21 +45,22 @@ class Monitor:
         self.structural_phase = StructuralPhase.OPENING
         self._enqueue_strucutural(StructuralPhase.OPENING)
 
-    def _add_to_prefix_map(self, prefix_map: dict[tuple, set[int]],
+    def _add_to_prefix_map(self, prefix_map: dict[tuple[int, ...], set[int]],
                            text: str) -> None:
         ids = self.model.encode(text).tolist()[0]
         for i in range(len(ids)):
             prefix_map.setdefault(tuple(ids[:i]), set()).add(ids[i])
 
     def _build_function_prefix_map(
-            self, n_funcs: list[FunctionDefinition]) -> dict[tuple, set[int]]:
-        function_prefix_map: dict[tuple, set[int]] = {}
+            self, n_funcs: list[FunctionDefinition]) -> dict[tuple[int, ...],
+                                                             set[int]]:
+        function_prefix_map: dict[tuple[int, ...], set[int]] = {}
         for fn in n_funcs:
             self._add_to_prefix_map(function_prefix_map, f'"{fn.name}"')
         return function_prefix_map
 
-    def _build_bool_prefix_map(self) -> dict[tuple, set[int]]:
-        bool_prefix_map: dict[tuple, set[int]] = {}
+    def _build_bool_prefix_map(self) -> dict[tuple[int, ...], set[int]]:
+        bool_prefix_map: dict[tuple[int, ...], set[int]] = {}
         self._add_to_prefix_map(bool_prefix_map, "true")
         self._add_to_prefix_map(bool_prefix_map, "false")
         return bool_prefix_map
@@ -67,7 +68,8 @@ class Monitor:
     def _load_vocab(self) -> dict[str, int]:
         vocab_path = self.model.get_path_to_vocab_file()
         with open(vocab_path) as f:
-            return json.load(f)
+            result: dict[str, int] = json.load(f)
+            return result
 
     def update(self, token_id: int) -> None:
         self.generated_ids.append(token_id)
@@ -95,6 +97,8 @@ class Monitor:
         elif self.state == State.PARAM_STRING:
             self.param_string_token_count += 1
             if token_id == self.vocab['"']:
+                if self.current_function is None:
+                    return
                 self.param_string_token_count = 0
                 self.current_param_index += 1
                 self.state = State.STRUCTURAL
@@ -108,6 +112,8 @@ class Monitor:
                     self._enqueue_strucutural(StructuralPhase.PARAM_SEPARATOR)
         elif self.state == State.PARAM_BOOL:
             if not self.bool_prefix_map.get(tuple(self.generated_ids), set()):
+                if self.current_function is None:
+                    return
                 self.current_param_index += 1
                 self.state = State.STRUCTURAL
                 is_last = self.current_param_index >= len(
@@ -235,10 +241,9 @@ class Monitor:
             return self.function_prefix_map.get(tuple(self.generated_ids),
                                                 set())
         elif self.state == State.PARAM_NUMBER:
-            valid = set()
             if self.current_function is None:
                 return set()
-            valid = set()
+            valid: set[int] = set()
             is_last = (self.current_param_index + 1 >= len(
                 self.current_function.parameters))
             exit_token = self.vocab['}'] if is_last else self.vocab[',']
@@ -269,8 +274,3 @@ class Monitor:
                 and not self.structural_queue):
             return True
         return False
-
-    def test(self) -> None:
-        print(self.current_function)
-        print(self.current_param_index)
-        print(self.structural_queue)
