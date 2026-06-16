@@ -15,3 +15,6 @@ __pycache__/
 
 # Output
 data/output/
+
+# Moulinette testing
+moulinette/

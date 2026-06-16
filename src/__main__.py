@@ -20,6 +20,17 @@ def build_prompt(functions: list[FunctionDefinition]) -> str:
     return context
 
 
+def cast_parameters(parameters: dict[str, object],
+                    function: FunctionDefinition) -> dict[str, object]:
+    for key, value in parameters.items():
+        if key not in function.parameters:
+            continue
+        param_type = function.parameters[key].data_type
+        if param_type == "number":
+            parameters[key] = float(value)  # type: ignore
+    return parameters
+
+
 def main() -> None:
     arg_parser = argparse.ArgumentParser(description="Call Me Maybe: A "
                                          "constrained decoding pipeline for "
@@ -41,8 +52,9 @@ def main() -> None:
     model = Small_LLM_Model()
     monitor = Monitor(f_definitions, model)
     result_list: list[FunctionCall] = []
-
+    # i_prompts = i_prompts[9:10]
     for prompt in i_prompts:
+        print(f"Processing: {prompt.prompt}")
         monitor.start(prompt.prompt)
         full_prompt = build_prompt(f_definitions)
         input_ids = model.encode(full_prompt).tolist()[0]
@@ -57,11 +69,19 @@ def main() -> None:
             monitor.update(token_id)
 
         decoded = model.decode(monitor.all_generated_ids)
-        result_json = json.loads(decoded)
+        print(f"Generated JSON: {repr(decoded)}")
+        try:
+            result_json = json.loads(decoded)
+        except json.JSONDecodeError:
+            print(f"Skipping invalid JSON for prompt: {prompt.prompt}")
+            continue
+        current_fn = next(fn for fn in f_definitions
+                          if fn.name == result_json["name"])
+        params = cast_parameters(result_json["parameters"], current_fn)
         result_list.append(FunctionCall(
             prompt=prompt.prompt,
             name=result_json["name"],
-            parameters=result_json["parameters"]))
+            parameters=params))
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w") as f:
         f.write(json.dumps([fc.model_dump() for fc in result_list], indent=2))

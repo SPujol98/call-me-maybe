@@ -25,10 +25,12 @@ class Monitor:
         self.current_function: FunctionDefinition | None = None
         self.current_param_index: int = 0
         self.vocab: dict[str, int] = self._load_vocab()
-        self.quote_containing_tokens: set[int] = {
-            tid for tok, tid in self.vocab.items()
-            if '"' in tok and tok != '"'
-        }
+        self.invalid_string_tokens: set[int] = set()
+        for tok, tid in self.vocab.items():
+            decoded = self.model.decode([tid])
+            if any(c in decoded for c in ['"', '\n', '\r', '\t', '\x00']):
+                if tid != self.vocab['"']:
+                    self.invalid_string_tokens.add(tid)
         self.structural_queue: deque[int] = deque()
         self.structural_phase: StructuralPhase = StructuralPhase.OPENING
 
@@ -258,7 +260,7 @@ class Monitor:
         elif self.state == State.PARAM_STRING:
             if self.param_string_token_count > 50:
                 return {self.vocab['"']}
-            return set(self.vocab.values()) - self.quote_containing_tokens
+            return set(self.vocab.values()) - self.invalid_string_tokens
         elif self.state == State.PARAM_BOOL:
             return self.bool_prefix_map.get(tuple(self.generated_ids),
                                             set())
