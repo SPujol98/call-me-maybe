@@ -54,26 +54,26 @@ def main() -> None:
     result_list: list[FunctionCall] = []
     # i_prompts = i_prompts[9:10]
     for prompt in i_prompts:
-        print(f"Processing: {prompt.prompt}")
         monitor.start(prompt.prompt)
         full_prompt = build_prompt(f_definitions)
         input_ids = model.encode(full_prompt).tolist()[0]
 
         while not monitor.end_checker():
-            input_ids = input_ids[-512:]
-            logits = model.get_logits_from_input_ids(input_ids)
             valid = monitor.get_valid_tokens()
-            filtered = filter_logits(logits, valid)
-            token_id = int(np.argmax(filtered))
+            if len(valid) == 1:
+                token_id = next(iter(valid))
+            else:
+                input_ids = input_ids[-512:]
+                logits = model.get_logits_from_input_ids(input_ids)
+                filtered = filter_logits(logits, valid)
+                token_id = int(np.argmax(filtered))
             input_ids.append(token_id)
             monitor.update(token_id)
 
         decoded = model.decode(monitor.all_generated_ids)
-        print(f"Generated JSON: {repr(decoded)}")
         try:
             result_json = json.loads(decoded)
         except json.JSONDecodeError:
-            print(f"Skipping invalid JSON for prompt: {prompt.prompt}")
             continue
         current_fn = next(fn for fn in f_definitions
                           if fn.name == result_json["name"])
