@@ -3,7 +3,6 @@ import sys
 import os
 
 from src.models import FunctionDefinition, InputPrompt
-from pydantic import ValidationError
 
 
 def load_function_definitions(path: str) -> list[FunctionDefinition]:
@@ -24,16 +23,17 @@ def load_function_definitions(path: str) -> list[FunctionDefinition]:
 
 
 def load_input_prompts(path: str) -> list[InputPrompt]:
-    input_list: list[InputPrompt] = []
+    if not os.path.exists(path):
+        print(f"Error: input prompts file not found: {path}",
+              file=sys.stderr)
+        sys.exit(1)
     try:
         with open(path) as f:
             data = json.load(f)
-            for d in data:
-                input_list.append(InputPrompt.model_validate(d))
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
     except json.JSONDecodeError as e:
-        print(f"Error: {e}")
-    except ValidationError as e:
-        print(f"Error: {e}")
-    return input_list
+        print(f"Error: invalid JSON in {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(data, list):
+        print(f"Error: {path} must contain a JSON array", file=sys.stderr)
+        sys.exit(1)
+    return [InputPrompt(**item) for item in data]
