@@ -11,6 +11,10 @@ from llm_sdk import Small_LLM_Model  # type: ignore
 
 
 def build_prompt(functions: list[FunctionDefinition]) -> str:
+    """
+    Build the system coontext listing available functions and
+    single few-shot example of the target JSON output format.
+    """
     context = "You are a function calling engine. Available functions:\n"
     for fn in functions:
         context += f"- {fn.name}: {fn.description}\n"
@@ -22,6 +26,9 @@ def build_prompt(functions: list[FunctionDefinition]) -> str:
 
 def cast_parameters(parameters: dict[str, object],
                     function: FunctionDefinition) -> dict[str, object]:
+    """
+    Cast values declared as "number" to float.
+    """
     for key, value in parameters.items():
         if key not in function.parameters:
             continue
@@ -32,6 +39,11 @@ def cast_parameters(parameters: dict[str, object],
 
 
 def main() -> None:
+    """
+    Run the constrained decoding pipeline: for each prompt, generate a
+    a function call token by token, skipping the model whenever the monitor
+    already knows the only valid next token.
+    """
     arg_parser = argparse.ArgumentParser(description="Call Me Maybe: A "
                                          "constrained decoding pipeline for "
                                          "strict function calling "
@@ -52,7 +64,6 @@ def main() -> None:
     model = Small_LLM_Model()
     monitor = Monitor(f_definitions, model)
     result_list: list[FunctionCall] = []
-    # i_prompts = i_prompts[9:10]
     for prompt in i_prompts:
         monitor.start(prompt.prompt)
         full_prompt = build_prompt(f_definitions)
@@ -69,7 +80,9 @@ def main() -> None:
                 token_id = int(np.argmax(filtered))
             input_ids.append(token_id)
             monitor.update(token_id)
-
+            word = model.decode([token_id])
+            print(word, end="", flush=True)
+        print()
         decoded = model.decode(monitor.all_generated_ids)
         try:
             result_json = json.loads(decoded)

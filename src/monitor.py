@@ -35,6 +35,11 @@ class Monitor:
         self.structural_phase: StructuralPhase = StructuralPhase.OPENING
 
     def start(self, prompt: str) -> None:
+        """
+        Reset the monitor and queue the opening JSON scaffold for a new prompt,
+        embedding the prompt text itself.
+
+        """
         self.state = State.STRUCTURAL
         self.current_prompt = prompt
         self.generated_ids = []
@@ -49,6 +54,11 @@ class Monitor:
 
     def _add_to_prefix_map(self, prefix_map: dict[tuple[int, ...], set[int]],
                            text: str) -> None:
+        """
+        Register every prefix of the tokenized text so that, given any
+        partial sequence already generated, the next valid tokens can be looked
+        up directly.
+        """
         ids = self.model.encode(text).tolist()[0]
         for i in range(len(ids)):
             prefix_map.setdefault(tuple(ids[:i]), set()).add(ids[i])
@@ -74,6 +84,13 @@ class Monitor:
             return result
 
     def update(self, token_id: int) -> None:
+        """Advance the state machine after a token has been generated.
+
+        Pops the token from the structural queue if forced, or checks
+        whether the current parameter value (string, number, or bool)
+        has just been closed, enqueueing the next piece of structure
+        accordingly.
+        """
         self.generated_ids.append(token_id)
         self.all_generated_ids.append(token_id)
 
@@ -152,6 +169,10 @@ class Monitor:
                 self.param_number_count += 1
 
     def _transition_from_structural(self) -> None:
+        """
+        Decide what comes next once a forced sequence of tokens has been fully
+        emitted: either more structure or free-choice state.
+        """
         if self.structural_phase == StructuralPhase.OPENING:
             self.generated_ids = []
             self.state = State.FUNCTION_NAME
@@ -197,6 +218,10 @@ class Monitor:
             pass
 
     def _enqueue_strucutural(self, str_phase: StructuralPhase) -> None:
+        """
+        Encode a fixe piece of JSON scaffolding and queue its tokens
+        so they get forced one by one in the next update() calls.
+        """
         if str_phase == StructuralPhase.OPENING:
             escaped = self.current_prompt.replace('"', '\\"')
             text = f'{{"prompt": "{escaped}", "name":'
@@ -239,6 +264,10 @@ class Monitor:
                 self.structural_queue.append(id)
 
     def get_valid_tokens(self) -> set[int]:
+        """
+        Return the set of token ids allowed at the current step, given
+        the active state phase.
+        """
         if self.state == State.FUNCTION_NAME:
             return self.function_prefix_map.get(tuple(self.generated_ids),
                                                 set())
@@ -271,6 +300,10 @@ class Monitor:
         return set()
 
     def end_checker(self) -> bool:
+        """
+        Return True once the closing '}'s have been fully emitted
+        and there is no more pending generation.
+        """
         if ((self.structural_phase == StructuralPhase.CLOSING or
              self.structural_phase == StructuralPhase.CLOSING_DOUBLE)
                 and not self.structural_queue):
